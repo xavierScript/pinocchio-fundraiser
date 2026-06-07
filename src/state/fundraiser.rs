@@ -65,7 +65,7 @@ impl Fundraiser {
     }
 
     pub fn set_time_started(&mut self, time_s: i64) {
-        self.time_started = time_s.to_be()
+        self.time_started = time_s;
     }
 
     pub fn duration(&self) -> u8 {

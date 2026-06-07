@@ -46,8 +46,7 @@ pub fn process_contribute_instruction(accounts: &mut [AccountView], data: &[u8])
     let bump_fundraiser  = data[1];
     let amount           = u64::from_le_bytes(data[2..10].try_into().unwrap());
 
-    // ── Load fundraiser state (shared peek for validation, then mut borrow) ──
-    // We do a quick immutable read for the maker key so we can derive the PDA.
+    // Load fundraiser state (shared peek for validation, then mut borrow)
     let (maker_raw, mint_raw, amount_to_raise, current_amount, time_started, duration) = {
         let data_bytes = unsafe { fundraiser.borrow_unchecked() };
         if data_bytes.len() != Fundraiser::LEN {
@@ -139,8 +138,8 @@ pub fn process_contribute_instruction(accounts: &mut [AccountView], data: &[u8])
     
     // Business logic checks
 
-    // 1. Contribution must be > 1 * 10^decimals  (mirrors `1_u8.pow(decimals)`)
-    let min_contribution: u64 = (1_u64)
+    // 1. Contribution must be > 1 * 10^decimals (i.e. at least 1 whole token)
+    let min_contribution: u64 = 10_u64
         .checked_pow(decimals as u32)
         .ok_or(ProgramError::ArithmeticOverflow)?;
     if amount <= min_contribution {

@@ -29,8 +29,8 @@ pub fn process_instruction(
     match FundraiserInstructions::try_from(discriminator)? {
         FundraiserInstructions::Initialize => instructions::process_initialize_instruction(accounts, data)?,
         FundraiserInstructions::Contribute => instructions::process_contribute_instruction(accounts, data)?,
-        // FundraiserInstructions::Checker => instructions::process_checker_instruction(accounts, data)?,
-        // FundraiserInstructions::Refund => instructions::process_refund_instruction(accounts, data)?,
+        FundraiserInstructions::Checker    => instructions::process_check_contributions_instruction(accounts, data)?,
+        FundraiserInstructions::Refund     => instructions::process_refund_instruction(accounts, data)?,
     }
 
     Ok(())

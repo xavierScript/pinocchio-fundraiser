@@ -2,7 +2,7 @@ use pinocchio::{
     AccountView, ProgramResult,
     cpi::{Seed, Signer},
     error::ProgramError,
-    sysvars::{Sysvar, clock::Clock},
+    // sysvars::{Sysvar, clock::Clock},
 };
 use pinocchio_pubkey::derive_address;
 use pinocchio_token::{
@@ -38,19 +38,19 @@ pub fn process_check_contributions_instruction(
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
-    // ── Signer check ─────────────────────────────────────────────────────────
+    // Signer check
     if !maker.is_signer() {
         return Err(ProgramError::MissingRequiredSignature);
     }
 
-    // ── Deserialize instruction data ──────────────────────────────────────────
+    // Deserialize instruction data
     // Layout: [bump: u8 (1)]
     if data.is_empty() {
         return Err(ProgramError::InvalidInstructionData);
     }
     let bump = data[0];
 
-    // ── Load fundraiser state (immutable snapshot) ────────────────────────────
+    // Load fundraiser state (immutable snapshot)
     let (maker_raw, mint_raw, amount_to_raise, bump_stored) = {
         let data_bytes = unsafe { fundraiser.borrow_unchecked() };
         if data_bytes.len() != Fundraiser::LEN {
@@ -60,17 +60,17 @@ pub fn process_check_contributions_instruction(
         (f.maker, f.mint_to_raise, f.amount_to_raise(), f.bump)
     };
 
-    // ── Verify maker matches fundraiser's recorded maker ──────────────────────
+    // Verify maker matches fundraiser's recorded maker
     if maker.address().as_ref() != maker_raw.as_ref() {
         return Err(ProgramError::InvalidAccountData);
     }
 
-    // ── Verify mint_to_raise matches fundraiser's recorded mint ───────────────
+    // Verify mint_to_raise matches fundraiser's recorded mint
     if mint_to_raise.address().as_ref() != mint_raw.as_ref() {
         return Err(ProgramError::InvalidAccountData);
     }
 
-    // ── Verify fundraiser PDA ─────────────────────────────────────────────────
+    // Verify fundraiser PDA
     let fundraiser_pda = derive_address(
         &[b"fundraiser".as_ref(), maker_raw.as_ref(), &[bump]],
         None,
@@ -99,18 +99,18 @@ pub fn process_check_contributions_instruction(
         return Err(FundraiserError::InvalidVault.into());
     }
 
-    // ── Read vault token balance ──────────────────────────────────────────────
+    // Read vault token balance
     let vault_amount = {
         let vault_state = unsafe { TokenAccount::from_account_view_unchecked(vault)? };
         vault_state.amount()
     };
 
-    // ── Business logic: target must be met ───────────────────────────────────
+    // Business logic: target must be met
     if vault_amount < amount_to_raise {
         return Err(FundraiserError::TargetNotMet.into());
     }
 
-    // ── init_if_needed: create maker ATA if it doesn't exist yet ─────────────
+    // init_if_needed: create maker ATA if it doesn't exist yet
     if maker_ata.data_len() == 0 {
         Create {
             funding_account: maker,
@@ -123,7 +123,7 @@ pub fn process_check_contributions_instruction(
         .invoke()?;
     }
 
-    // ── Build PDA signer for the fundraiser (authority over the vault) ────────
+    // Build PDA signer for the fundraiser (authority over the vault)
     let bump_bytes = [bump];
     let signer_seeds = [
         Seed::from(b"fundraiser"),
@@ -136,7 +136,7 @@ pub fn process_check_contributions_instruction(
     Transfer::new(vault, maker_ata, fundraiser, vault_amount)
         .invoke_signed(&[signer])?;
 
-    // ── Close the fundraiser account, returning lamports to maker ─────────────
+    // Close the fundraiser account, returning lamports to maker
     // Step 1: move lamports out first (runtime requires balanced lamports)
     let fundraiser_lamports = fundraiser.lamports();
     fundraiser.set_lamports(0);

@@ -45,10 +45,11 @@ pub fn process_initialize_instruction(accounts: &mut [AccountView], data: &[u8])
     let mint_state = Mint::from_account_view(mint_to_raise)?;
     let decimals = mint_state.decimals();
 
-    // Calculate the threshold securely using checked math (can it be unsafe? can CUs be reduced?)
-    let min_required = MIN_AMOUNT_TO_RAISE
+    // Calculate the threshold: MIN_AMOUNT_TO_RAISE * 10^decimals (e.g. 3 * 1_000_000 for 6 decimals)
+    let min_required = 10_u64
         .checked_pow(decimals as u32)
-        .ok_or(ProgramError::InvalidAccountData)?;
+        .and_then(|scale| MIN_AMOUNT_TO_RAISE.checked_mul(scale))
+        .ok_or(ProgramError::ArithmeticOverflow)?;
 
     // Enforce the requirement
     if amount_to_raise <= min_required {
