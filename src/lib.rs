@@ -11,6 +11,9 @@ mod state;
 mod constants;
 mod error;
 
+#[cfg(test)]
+mod tests;
+
 entrypoint!(process_instruction);
 
 declare_id!("CjtGSamLr2wW9RK5EtTVthaRfXYZbz8GPodzJHUpJbQN");

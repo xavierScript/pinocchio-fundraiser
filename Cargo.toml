@@ -28,8 +28,8 @@ solana-signer = "3.0.0"
 solana-transaction = "3.0.2"
 solana-message = "3.0.1"
 solana-sdk-ids = "3.1.0"
-spl-token-2022 = { version = "10.0.0", features = ["no-entrypoint"] }
-spl-associated-token-account = "8.0.0"
+spl-token-2022 = { version = "11.0.0", features = ["no-entrypoint"] }
+spl-associated-token-account = { version = "8.0.0", features = ["no-entrypoint"] }
 solana-rpc-client = "3.1.9"
-solana-address = "2.2.0"
-solana-account = "4.1.0"
+# solana-address = "2.2.0"
+# solana-account = "4.1.0"
