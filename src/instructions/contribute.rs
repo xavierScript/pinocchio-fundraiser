@@ -6,10 +6,7 @@ use pinocchio::{
 };
 use pinocchio_pubkey::derive_address;
 use pinocchio_system::instructions::CreateAccount;
-use pinocchio_token::{
-    instructions::Transfer,
-    state::Mint,
-};
+use pinocchio_token::instructions::Transfer;
 
 use crate::{
     constants::{MAX_CONTRIBUTION_PERCENTAGE, PERCENTAGE_SCALER, SECONDS_TO_DAYS},
@@ -25,8 +22,8 @@ pub fn process_contribute_instruction(accounts: &mut [AccountView], data: &[u8])
         contributor_account,
         contributor_ata,
         vault,
-        system_program,
-        token_program,
+        _system_program,
+        _token_program,
         // _rest @ ..
     ] = accounts
     else {
@@ -38,13 +35,14 @@ pub fn process_contribute_instruction(accounts: &mut [AccountView], data: &[u8])
         return Err(ProgramError::MissingRequiredSignature);
     }
 
-    // Extract the payload data securely (TODO: use unsafe later to reduce CUs)
-     if data.len() < 10 {
+    // Extract the payload data securely
+    if data.len() < 10 {
         return Err(ProgramError::InvalidInstructionData);
     }
-    let bump_contributor = data[0];
-    let bump_fundraiser  = data[1];
-    let amount           = u64::from_le_bytes(data[2..10].try_into().unwrap());
+    let ptr = data.as_ptr();
+    let bump_contributor = unsafe { *ptr };
+    let bump_fundraiser  = unsafe { *ptr.add(1) };
+    let amount           = unsafe { (ptr.add(2) as *const u64).read_unaligned() };
 
     // Load fundraiser state (shared peek for validation, then mut borrow)
     let (maker_raw, mint_raw, amount_to_raise, current_amount, time_started, duration) = {
@@ -132,10 +130,9 @@ pub fn process_contribute_instruction(accounts: &mut [AccountView], data: &[u8])
         c.amount()
     };
 
-    // Parse mint decimals for minimum-contribution check
-    let decimals = Mint::from_account_view(mint_to_raise)?.decimals();
+    // Parse mint decimals for minimum-contribution check (direct read at offset 44)
+    let decimals = unsafe { *mint_to_raise.borrow_unchecked().as_ptr().add(44) };
 
-    
     // Business logic checks
 
     // 1. Contribution must be > 1 * 10^decimals (i.e. at least 1 whole token)
@@ -174,12 +171,13 @@ pub fn process_contribute_instruction(accounts: &mut [AccountView], data: &[u8])
     Transfer::new(contributor_ata, vault, contributor, amount)
         .invoke()?;
 
-    // Update state
+    // Update fundraiser state
     {
         let fundraiser_state = Fundraiser::from_account_info(fundraiser)?;
         fundraiser_state.set_current_amount(current_amount + amount);
     }
 
+    // Update contributor state
     {
         let contributor_state = Contributor::from_account_info(contributor_account)?;
         contributor_state.set_amount(new_total);

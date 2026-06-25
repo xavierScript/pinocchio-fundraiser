@@ -7,7 +7,6 @@ use pinocchio::{
 use pinocchio_pubkey::derive_address;
 use pinocchio_system::instructions::CreateAccount;
 use pinocchio_associated_token_account::instructions::Create;
-use pinocchio_token::state::Mint;
 
 use crate::state::Fundraiser;
 use crate::constants::MIN_AMOUNT_TO_RAISE;
@@ -37,13 +36,13 @@ pub fn process_initialize_instruction(accounts: &mut [AccountView], data: &[u8])
     if data.len() < 10 {
         return Err(ProgramError::InvalidInstructionData);
     }
-    let bump = data[0];
-    let amount_to_raise = u64::from_le_bytes(data[1..9].try_into().unwrap());
-    let duration = data[9];
+    let ptr = data.as_ptr();
+    let bump = unsafe { *ptr };
+    let amount_to_raise = unsafe { (ptr.add(1) as *const u64).read_unaligned() };
+    let duration = unsafe { *ptr.add(9) };
 
     // Parse the mint account (can it be unsafe? can CUs be reduced?)
-    let mint_state = Mint::from_account_view(mint_to_raise)?;
-    let decimals = mint_state.decimals();
+    let decimals = unsafe { *mint_to_raise.borrow_unchecked().as_ptr().add(44) };
 
     // Calculate the threshold: MIN_AMOUNT_TO_RAISE * 10^decimals (e.g. 3 * 1_000_000 for 6 decimals)
     let min_required = 10_u64

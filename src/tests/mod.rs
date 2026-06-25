@@ -92,7 +92,21 @@ mod tests {
         (svm, payer)
     }
 
-    // ─── Transaction helpers ──────────────────────────────────────────────────
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Once;
+
+    static TOTAL_CUS: AtomicU64 = AtomicU64::new(0);
+    static REGISTER_EXIT: Once = Once::new();
+
+    unsafe extern "C" {
+        fn atexit(cb: extern "C" fn()) -> i32;
+    }
+
+    extern "C" fn print_total_cus() {
+        println!("\n==================================================");
+        println!("  TOTAL COMPUTE UNITS CONSUMED ACROSS ALL TESTS: {}", TOTAL_CUS.load(Ordering::Relaxed));
+        println!("==================================================\n");
+    }
 
     /// Send a single instruction, signing with all provided keypairs.
     fn send_ix(
@@ -101,10 +115,26 @@ mod tests {
         signers: &[&Keypair],
         ix: Instruction,
     ) -> litesvm::types::TransactionMetadata {
+        REGISTER_EXIT.call_once(|| {
+            unsafe {
+                atexit(print_total_cus);
+            }
+        });
+        let ix_name = match ix.data.first() {
+            Some(&IX_INITIALIZE) => "Initialize",
+            Some(&IX_CONTRIBUTE) => "Contribute",
+            Some(&IX_CHECKER) => "Checker (Check Contributions)",
+            Some(&IX_REFUND) => "Refund",
+            _ => "Unknown",
+        };
         let msg = Message::new(&[ix], Some(&payer.pubkey()));
         let blockhash = svm.latest_blockhash();
         let tx = Transaction::new(signers, msg, blockhash);
-        svm.send_transaction(tx).expect("transaction failed")
+        let meta = svm.send_transaction(tx).expect("transaction failed");
+        let prev_total = TOTAL_CUS.fetch_add(meta.compute_units_consumed, Ordering::Relaxed);
+        let new_total = prev_total + meta.compute_units_consumed;
+        println!(">>> {} CU consumed: {} | Adding to total: {} -> New Total: {}", ix_name, meta.compute_units_consumed, meta.compute_units_consumed, new_total);
+        meta
     }
 
     /// Like `send_ix` but returns the `Result` rather than unwrapping, so
@@ -115,10 +145,28 @@ mod tests {
         signers: &[&Keypair],
         ix: Instruction,
     ) -> Result<litesvm::types::TransactionMetadata, litesvm::types::FailedTransactionMetadata> {
+        REGISTER_EXIT.call_once(|| {
+            unsafe {
+                atexit(print_total_cus);
+            }
+        });
+        let ix_name = match ix.data.first() {
+            Some(&IX_INITIALIZE) => "Initialize",
+            Some(&IX_CONTRIBUTE) => "Contribute",
+            Some(&IX_CHECKER) => "Checker (Check Contributions)",
+            Some(&IX_REFUND) => "Refund",
+            _ => "Unknown",
+        };
         let msg = Message::new(&[ix], Some(&payer.pubkey()));
         let blockhash = svm.latest_blockhash();
         let tx = Transaction::new(signers, msg, blockhash);
-        svm.send_transaction(tx)
+        let res = svm.send_transaction(tx);
+        if let Ok(ref meta) = res {
+            let prev_total = TOTAL_CUS.fetch_add(meta.compute_units_consumed, Ordering::Relaxed);
+            let new_total = prev_total + meta.compute_units_consumed;
+            println!(">>> {} (try) CU consumed: {} | Adding to total: {} -> New Total: {}", ix_name, meta.compute_units_consumed, meta.compute_units_consumed, new_total);
+        }
+        res
     }
 
     // ─── Account data helpers ────────────────────────────────────────────────

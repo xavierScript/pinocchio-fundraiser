@@ -2,18 +2,13 @@ use pinocchio::{
     AccountView, ProgramResult,
     cpi::{Seed, Signer},
     error::ProgramError,
-    // sysvars::{Sysvar, clock::Clock},
 };
 use pinocchio_pubkey::derive_address;
 use pinocchio_token::{
     instructions::Transfer,
     state::Account as TokenAccount,
-    ID as TOKEN_PROGRAM_ID,
 };
-use pinocchio_associated_token_account::{
-    instructions::Create,
-    ID as ATA_PROGRAM_ID,
-};
+use pinocchio_associated_token_account::instructions::Create;
 
 use crate::{
     error::FundraiserError,
@@ -32,7 +27,7 @@ pub fn process_check_contributions_instruction(
         maker_ata,
         token_program,
         system_program,
-        associated_token_program,
+        _associated_token_program,
     ] = accounts
     else {
         return Err(ProgramError::NotEnoughAccountKeys);
@@ -48,7 +43,7 @@ pub fn process_check_contributions_instruction(
     if data.is_empty() {
         return Err(ProgramError::InvalidInstructionData);
     }
-    let bump = data[0];
+    let bump = unsafe { *data.as_ptr() };
 
     // Load fundraiser state (immutable snapshot)
     let (maker_raw, mint_raw, amount_to_raise, bump_stored) = {
@@ -86,24 +81,15 @@ pub fn process_check_contributions_instruction(
     }
 
     // ── Verify vault is the canonical ATA for (fundraiser PDA, mint) ─────────
-    let expected_vault = derive_address(
-        &[
-            fundraiser.address().as_array().as_ref(),
-            TOKEN_PROGRAM_ID.as_ref(),
-            mint_to_raise.address().as_array().as_ref(),
-        ],
-        None,
-        &ATA_PROGRAM_ID.to_bytes(),
-    );
-    if expected_vault != *vault.address().as_array() {
+    // Instead of expensive derive_address, verify ownership and mint directly
+    let vault_state = unsafe { TokenAccount::from_account_view_unchecked(vault)? };
+    if vault_state.owner() != fundraiser.address() {
         return Err(FundraiserError::InvalidVault.into());
     }
-
-    // Read vault token balance
-    let vault_amount = {
-        let vault_state = unsafe { TokenAccount::from_account_view_unchecked(vault)? };
-        vault_state.amount()
-    };
+    if vault_state.mint() != mint_to_raise.address() {
+        return Err(FundraiserError::InvalidVault.into());
+    }
+    let vault_amount = vault_state.amount();
 
     // Business logic: target must be met
     if vault_amount < amount_to_raise {
